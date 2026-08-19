@@ -14,6 +14,7 @@
   ],
   "scripts": {
     "dev": "npm run dev --workspace @infomemory/api",
+    "start": "npm run start --workspace @infomemory/api",
     "build": "npm run build --workspace @infomemory/core && npm run build --workspace @infomemory/api",
     "typecheck": "npm run typecheck --workspace @infomemory/core && npm run typecheck --workspace @infomemory/api",
     "test": "npm run test --workspace @infomemory/core && npm run test --workspace @infomemory/api",
