@@ -23,3 +23,26 @@ export {
   type AssetServiceOptions,
   type IngestAssetCommand,
 } from './services/asset-service.js';
+export {
+  SearchService,
+  type SearchCommand,
+  type SearchEvidence,
+  type SearchResult,
+} from './services/search-service.js';
+export {
+  AnswerService,
+  type AnswerCommand,
+  type AnswerDegradedReason,
+  type AnswerResult,
+  type AnswerStatus,
+} from './services/answer-service.js';
+export type {
+  GenerateAnswerInput,
+  LlmAnswerGenerator,
+} from './llm/llm-answer-generator.js';
+export {
+  LlmGatewayError,
+  OpenAiCompatibleClient,
+  type FetchLike,
+  type OpenAiCompatibleClientOptions,
+} from './llm/openai-compatible-client.js';
