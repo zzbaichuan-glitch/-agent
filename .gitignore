@@ -11,6 +11,9 @@ coverage/
 var/*.sqlite
 var/*.sqlite-shm
 var/*.sqlite-wal
+**/var/*.sqlite
+**/var/*.sqlite-shm
+**/var/*.sqlite-wal
 *.log
 
 .idea/

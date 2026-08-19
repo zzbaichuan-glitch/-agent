@@ -1,5 +1,6 @@
 import { mkdirSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve, isAbsolute } from 'node:path';
 
 import { OpenAiCompatibleClient, type LlmAnswerGenerator } from '@infomemory/core';
 import { config as loadEnvironment } from 'dotenv';
@@ -49,7 +50,8 @@ function createLlmGenerator(): LlmAnswerGenerator | undefined {
 
 function resolveDatabasePath(value: string): string {
   if (value === ':memory:') return value;
-  const absolute = resolve(value);
+  const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
+  const absolute = isAbsolute(value) ? value : resolve(projectRoot, value);
   mkdirSync(dirname(absolute), { recursive: true });
   return absolute;
 }
