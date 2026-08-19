@@ -2,6 +2,7 @@ import {
   AnswerService,
   AssetService,
   SearchService,
+  ReminderService,
   SqliteAssetRepository,
   type LlmAnswerGenerator,
 } from '@infomemory/core';
@@ -19,6 +20,7 @@ import { registerAssetRoutes } from './routes/assets.js';
 import { registerFeishuEventRoute } from './routes/feishu-events.js';
 import { registerHealthRoute } from './routes/health.js';
 import { registerSearchRoute } from './routes/search.js';
+import { registerReminderRoutes } from './routes/reminders.js';
 
 export interface BuildAppOptions {
   databasePath?: string;
@@ -34,8 +36,10 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   const assetService = new AssetService(repository);
   const searchService = new SearchService(repository);
   const answerService = new AnswerService(searchService, options.llmGenerator);
+  const reminderService = new ReminderService(repository);
   const feishuEvents = new FeishuEventService(
     assetService,
+    reminderService,
     options.feishuVerificationToken,
   );
 
@@ -82,6 +86,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
     registerAssetRoutes(secured, assetService, repository);
     registerSearchRoute(secured, searchService);
     registerAnswerRoute(secured, answerService);
+    registerReminderRoutes(secured, reminderService);
   }, { prefix: '/v1' });
 
   await app.register(async (feishu) => {

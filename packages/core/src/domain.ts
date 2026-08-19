@@ -23,3 +23,25 @@ export interface InformationAsset {
   secretFindingCount: number;
   createdAt: string;
 }
+
+export type ReminderStatus =
+  | 'scheduled'
+  | 'needs_confirmation'
+  | 'completed'
+  | 'cancelled';
+
+export type ReminderPrecision = 'exact' | 'period' | 'inferred';
+
+export interface Reminder {
+  id: string;
+  tenantId: string;
+  userId: string;
+  title: string;
+  startsAt: string;
+  remindAt: string;
+  status: ReminderStatus;
+  precision: ReminderPrecision;
+  sourceAssetId?: string;
+  sourceEventId?: string;
+  createdAt: string;
+}

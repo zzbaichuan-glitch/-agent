@@ -2,6 +2,9 @@ export type {
   AccessContext,
   AssetVisibility,
   InformationAsset,
+  Reminder,
+  ReminderPrecision,
+  ReminderStatus,
   SourceReference,
 } from './domain.js';
 export {
@@ -18,6 +21,11 @@ export {
   type PersistAssetInput,
 } from './repositories/asset-repository.js';
 export { SqliteAssetRepository } from './repositories/sqlite-asset-repository.js';
+export {
+  type ReminderRepository,
+  type ReminderListOptions,
+  type PersistReminderInput,
+} from './repositories/reminder-repository.js';
 export {
   AssetService,
   type AssetServiceOptions,
@@ -36,6 +44,15 @@ export {
   type AnswerResult,
   type AnswerStatus,
 } from './services/answer-service.js';
+export {
+  ReminderService,
+  type ReminderObservation,
+  type ReminderServiceOptions,
+} from './services/reminder-service.js';
+export {
+  extractMeetingReminder,
+  type MeetingReminderCandidate,
+} from './services/meeting-time-extractor.js';
 export type {
   GenerateAnswerInput,
   LlmAnswerGenerator,

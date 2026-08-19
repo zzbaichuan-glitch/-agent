@@ -1,6 +1,6 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 
-import { AssetService } from '@infomemory/core';
+import { AssetService, ReminderService, type Reminder } from '@infomemory/core';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -9,6 +9,7 @@ export type FeishuEventResult =
   | {
     type: 'ack';
     processed: boolean;
+    reminder?: Reminder | null;
     reason?:
       | 'unsupported_event'
       | 'unsupported_message_type'
@@ -34,6 +35,7 @@ export class FeishuConfigurationError extends Error {
 export class FeishuEventService {
   constructor(
     private readonly assetService: AssetService,
+    private readonly reminderService: ReminderService,
     private readonly verificationToken?: string,
   ) {}
 
@@ -87,10 +89,15 @@ export class FeishuEventService {
       },
     );
 
-    if (result.created) return { type: 'ack', processed: true };
+    const reminder = await this.reminderService.observeMessage(
+      { tenantId, userId },
+      { text, sourceAssetId: result.asset.id, sourceEventId: eventId },
+    );
+    if (result.created) return { type: 'ack', processed: true, reminder };
     return {
       type: 'ack',
       processed: false,
+      reminder,
       reason: result.deduplicatedBy === 'idempotency'
         ? 'duplicate_event'
         : 'duplicate_content',

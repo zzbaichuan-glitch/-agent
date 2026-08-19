@@ -12,6 +12,7 @@ export function registerFeishuEventRoute(
     return {
       code: 0,
       processed: result.processed,
+      ...(result.reminder ? { reminder: result.reminder } : {}),
       ...(result.reason ? { reason: result.reason } : {}),
     };
   });
