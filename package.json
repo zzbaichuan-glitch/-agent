@@ -1,0 +1,29 @@
+{
+  "name": "infomemory-agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Security-first enterprise information memory agent for Feishu and desktop workflows.",
+  "type": "module",
+  "packageManager": "npm@11.12.1",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @infomemory/api",
+    "build": "npm run build --workspace @infomemory/core && npm run build --workspace @infomemory/api",
+    "typecheck": "npm run typecheck --workspace @infomemory/core && npm run typecheck --workspace @infomemory/api",
+    "test": "npm run test --workspace @infomemory/core && npm run test --workspace @infomemory/api",
+    "test:watch": "npm run test:watch --workspaces --if-present",
+    "verify": "npm run typecheck && npm run test && npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  }
+}

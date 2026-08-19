@@ -1,0 +1,21 @@
+{
+  "name": "@infomemory/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "predev": "npm run build --workspace @infomemory/core",
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "pretest": "npm run build --workspace @infomemory/core",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@infomemory/core": "*",
+    "dotenv": "^17.2.0",
+    "fastify": "^5.6.0",
+    "zod": "^4.1.0"
+  }
+}
