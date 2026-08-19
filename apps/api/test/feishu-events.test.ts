@@ -64,7 +64,10 @@ describe('Feishu callback foundation', () => {
   });
 
   it('normalizes inbound text and deduplicates repeated event delivery', async () => {
-    const event = eventPayload({ eventId: 'event-text-1' });
+    const event = eventPayload({
+      eventId: 'event-text-1',
+      text: '请注意，明天 14:30 开会讨论上线方案。',
+    });
 
     const first = await app.inject({
       method: 'POST',
@@ -85,7 +88,11 @@ describe('Feishu callback foundation', () => {
       },
     });
 
-    expect(first.json()).toMatchObject({ code: 0, processed: true });
+    expect(first.json()).toMatchObject({
+      code: 0,
+      processed: true,
+      reminder: { status: 'scheduled', precision: 'exact' },
+    });
     expect(second.json()).toMatchObject({
       code: 0,
       processed: false,
@@ -94,9 +101,19 @@ describe('Feishu callback foundation', () => {
     expect(assets.json().assets).toHaveLength(1);
     expect(assets.json().assets[0]).toMatchObject({
       ownerId: 'open-id-1',
-      redactedContent: '请保存星海项目的部署结论。',
+      redactedContent: '请注意，明天 14:30 开会讨论上线方案。',
       visibility: 'owner',
     });
+
+    const reminders = await app.inject({
+      method: 'GET',
+      url: '/v1/reminders',
+      headers: {
+        'x-tenant-id': 'tenant-key-1',
+        'x-user-id': 'open-id-1',
+      },
+    });
+    expect(reminders.json().reminders).toHaveLength(1);
   });
 
   it('does not store unsupported message types', async () => {
@@ -118,6 +135,7 @@ function eventPayload(options: {
   eventId?: string;
   eventType?: string;
   messageType?: string;
+  text?: string;
 } = {}): Record<string, unknown> {
   return {
     schema: '2.0',
@@ -136,7 +154,7 @@ function eventPayload(options: {
         chat_id: 'chat-id-1',
         chat_type: 'p2p',
         message_type: options.messageType ?? 'text',
-        content: JSON.stringify({ text: '请保存星海项目的部署结论。' }),
+        content: JSON.stringify({ text: options.text ?? '请保存星海项目的部署结论。' }),
       },
     },
   };

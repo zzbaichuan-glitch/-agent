@@ -207,7 +207,7 @@ export class SqliteAssetRepository implements AssetRepository, ReminderRepositor
     const rows = this.#database.prepare(`
       SELECT * FROM reminders
       WHERE ${clauses.join(' AND ')}
-      ORDER BY starts_at ASC, id ASC
+      ORDER BY remind_at ASC, starts_at ASC, id ASC
       LIMIT ? OFFSET ?
     `).all(...values, limit, offset) as Row[];
     return rows.map((row) => this.#mapReminder(row));

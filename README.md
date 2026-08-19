@@ -23,9 +23,10 @@ GitHub 仓库已更名为 [`infomemory-agent`](https://github.com/zzbaichuan-gli
 - OpenAI-compatible `/chat/completions` 适配器。
 - 模型关闭、超时、失败或答案无引用时自动降级为证据列表。
 - 飞书 URL verification、事件 Token 验证、文本事件标准化和重复事件去重。
+- 从飞书文本中识别明确或模糊的会议时间，创建用户私有的日程提醒候选；模糊时间会标记为待确认。
 - SQLite 本地存储、HTTP API、类型检查、单元测试和冒烟测试脚本。
 
-尚未实现：生产身份认证、飞书 OAuth/权限同步、飞书主动回复、云文档同步、向量检索、桌面 UI、OCR、完整审计和生产数据库。这些能力不能从当前健康检查中被误判为已完成。
+尚未实现：生产身份认证、飞书 OAuth/权限同步、飞书主动回复、云文档同步、向量检索、桌面 UI、OCR、系统级通知/闹钟调度、完整审计和生产数据库。这些能力不能从当前健康检查中被误判为已完成。当前提醒能力会保存排程和到期查询结果，客户端仍需轮询到期接口并调用本地通知能力。
 
 ## 安全提醒
 
@@ -200,6 +201,9 @@ x-user-id: <user-id>
 | GET | `/v1/assets` | 列出当前访问上下文可见资产 |
 | POST | `/v1/search` | 关键词证据搜索 |
 | POST | `/v1/answers` | 有引用约束的回答或证据降级 |
+| GET | `/v1/reminders` | 列出当前用户的私有会议提醒，可按状态和到期时间过滤 |
+| GET | `/v1/reminders/due` | 列出当前时刻前需要触发的已确认提醒 |
+| POST | `/v1/reminders/:id/status` | 确认、完成或取消提醒 |
 | POST | `/v1/connectors/feishu/events` | 飞书验证与事件回调 |
 
 ## 飞书回调基础
@@ -211,6 +215,8 @@ https://<public-host>/v1/connectors/feishu/events
 ```
 
 需要配置 `FEISHU_VERIFICATION_TOKEN`。服务端支持 `url_verification` 和 `im.message.receive_v1` 的文本消息；只保存机器人收到的事件，默认按发送者个人可见。图片、文件、历史消息拉取、主动回复、OAuth 和源权限同步尚未实现。
+
+当文本包含“明天 14:30 开会”这类明确时间时，回调会创建 `scheduled` 提醒；“下午要开会”这类信息会创建 `needs_confirmation` 提醒，默认使用下午 15:00 作为候选时间并提前 60 分钟提醒，客户端应先让用户确认。当前服务不会直接调用操作系统闹钟或向飞书主动发消息。
 
 开发环境不应把未认证的本地服务直接暴露到公网。正式接入前需补充 HTTPS、请求限流、飞书 Encrypt Key 解密（如启用加密）、生产身份和完整审计。
 

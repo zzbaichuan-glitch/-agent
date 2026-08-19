@@ -24,14 +24,28 @@ export function registerReminderRoutes(
   app: FastifyInstance,
   reminderService: ReminderService,
 ): void {
+  app.get('/reminders/due', async (request) => {
+    const query = z.object({ at: z.iso.datetime().optional() }).parse(request.query);
+    return {
+      reminders: await reminderService.listDue(
+        requireAccessContext(request),
+        query.at ? new Date(query.at) : undefined,
+      ),
+    };
+  });
+
   app.get('/reminders', async (request) => {
     const query = querySchema.parse(request.query);
     const status = query.status ? parseStatuses(query.status) : undefined;
-    const { status: _rawStatus, ...rest } = query;
+    const { status: _rawStatus, dueBefore, ...rest } = query;
     return {
       reminders: await reminderService.list(
         requireAccessContext(request),
-        { ...rest, ...(status ? { status } : {}) },
+        {
+          ...rest,
+          ...(status ? { status } : {}),
+          ...(dueBefore ? { dueBefore } : {}),
+        },
       ),
     };
   });

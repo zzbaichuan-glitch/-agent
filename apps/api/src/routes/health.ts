@@ -23,6 +23,7 @@ export function registerHealthRoute(
       'keyword_evidence_search',
       'citation_gated_answers',
       'feishu_callback_foundation',
+      'meeting_reminder_candidates',
     ],
   }));
 }

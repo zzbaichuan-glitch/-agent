@@ -116,6 +116,58 @@ describe('InfoMemory API', () => {
     expect(response.json()).toMatchObject({ error: 'validation_error' });
     expect(response.body).not.toContain(sensitiveInput);
   });
+
+  it('lists private reminders and supports confirmation/completion updates', async () => {
+    const created = await app.inject({
+      method: 'POST',
+      url: '/v1/connectors/feishu/events',
+      payload: {
+        type: 'url_verification',
+        token: 'verification-token-for-tests',
+        challenge: 'unused',
+      },
+    });
+    expect(created.statusCode).toBe(200);
+
+    const event = {
+      header: {
+        event_id: 'reminder-api-event',
+        event_type: 'im.message.receive_v1',
+        tenant_key: 'tenant-a',
+        token: 'verification-token-for-tests',
+      },
+      event: {
+        sender: { sender_id: { open_id: 'alice' } },
+        message: {
+          message_id: 'reminder-message',
+          message_type: 'text',
+          content: JSON.stringify({ text: '下午要开会，先帮我记着。' }),
+        },
+      },
+    };
+    const ingested = await app.inject({
+      method: 'POST',
+      url: '/v1/connectors/feishu/events',
+      payload: event,
+    });
+    const reminder = ingested.json().reminder as { id: string; status: string };
+    expect(reminder.status).toBe('needs_confirmation');
+
+    const updated = await app.inject({
+      method: 'POST',
+      url: `/v1/reminders/${reminder.id}/status`,
+      headers: accessHeaders('tenant-a', 'alice'),
+      payload: { status: 'completed' },
+    });
+    expect(updated.statusCode).toBe(200);
+    expect(updated.json().reminder.status).toBe('completed');
+    const hidden = await app.inject({
+      method: 'GET',
+      url: '/v1/reminders',
+      headers: accessHeaders('tenant-a', 'bob'),
+    });
+    expect(hidden.json().reminders).toEqual([]);
+  });
 });
 
 function accessHeaders(
