@@ -18,6 +18,16 @@ describe('meeting reminder extraction', () => {
     });
   });
 
+  it('extracts an absolute date and treats an hour-only time as exact', () => {
+    const result = extractMeetingReminder('2026年8月20日 14点开会。', now);
+
+    expect(result).toMatchObject({
+      precision: 'exact',
+      needsConfirmation: false,
+      startsAt: new Date('2026-08-20T06:00:00.000Z'),
+    });
+  });
+
   it('marks broad periods as needing confirmation', () => {
     const result = extractMeetingReminder('下午要开会，大家别忘了参加。', now);
 

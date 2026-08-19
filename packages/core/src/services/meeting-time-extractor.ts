@@ -10,7 +10,7 @@ export interface MeetingReminderCandidate {
 }
 
 const MEETING_PATTERN = /(?:开会|会议|例会|评审|评审会|讨论会|碰头会|同步会|站会|meeting|meet)/iu;
-const DATE_PATTERN = /(?:(今天|明天|后天)|((?:20\d{2})[-年](\d{1,2})[-月](\d{1,2})日?)|(下?周)([一二三四五六日天1-7]))/u;
+const DATE_PATTERN = /(?:(今天|明天|后天)|((20\d{2})[-年](\d{1,2})[-月](\d{1,2})日?)|(下?周)([一二三四五六日天1-7]))/u;
 const CLOCK_PATTERN = /(?:(上午|早上|下午|晚上|今晚|中午)\s*)?(\d{1,2})(?:(?:[:：](\d{1,2}))|(?:[点时](\d{1,2})?分?))/u;
 const PERIOD_PATTERN = /(上午|早上|下午|晚上|今晚|中午)/u;
 
@@ -43,9 +43,9 @@ export function extractMeetingReminder(
     startsAt.setDate(startsAt.getDate() + 1);
   }
 
-  const precision: MeetingReminderPrecision = time.inferred
-    ? periodMatch ? 'period' : 'inferred'
-    : dateMatch ? 'exact' : 'inferred';
+  const precision: MeetingReminderPrecision = dateMatch && time.hasExplicitHour
+    ? 'exact'
+    : periodMatch ? 'period' : 'inferred';
   const needsConfirmation = precision !== 'exact';
   const remindAt = new Date(startsAt.getTime() - (needsConfirmation ? 60 : 30) * 60_000);
   const contextStart = Math.max(0, (dateMatch?.index ?? periodMatch?.index ?? timeMatch?.index ?? meeting.index) - 32);
@@ -68,11 +68,11 @@ function resolveDate(match: RegExpMatchArray | null, now: Date): Date | null {
     const delta = relative === '明天' ? 1 : relative === '后天' ? 2 : 0;
     return new Date(now.getFullYear(), now.getMonth(), now.getDate() + delta);
   }
-  if (match[2] && match[3] && match[4]) {
-    return new Date(Number(match[2]), Number(match[3]) - 1, Number(match[4]));
+  if (match[2] && match[3] && match[4] && match[5]) {
+    return new Date(Number(match[3]), Number(match[4]) - 1, Number(match[5]));
   }
-  const weekPrefix = match[5];
-  const dayValue = match[6];
+  const weekPrefix = match[6];
+  const dayValue = match[7];
   if (!weekPrefix || !dayValue) return null;
   const target = chineseWeekday(dayValue);
   if (target === null) return null;
@@ -85,7 +85,7 @@ function resolveDate(match: RegExpMatchArray | null, now: Date): Date | null {
 function resolveTime(
   clock: RegExpMatchArray | null,
   period: RegExpMatchArray | null,
-): { hour: number; minute: number; inferred: boolean } | null {
+): { hour: number; minute: number; inferred: boolean; hasExplicitHour: boolean } | null {
   if (!clock && !period) return null;
   const periodName = clock?.[1] ?? period?.[1];
   const rawHour = clock?.[2];
@@ -97,7 +97,7 @@ function resolveTime(
   if (periodName === '中午' && hour < 11 && rawHour) normalizedHour += 12;
   const minute = rawMinute ? Number(rawMinute) : 0;
   if (minute > 59) return null;
-  return { hour: normalizedHour, minute, inferred: !rawHour || !rawMinute };
+  return { hour: normalizedHour, minute, inferred: !rawHour, hasExplicitHour: Boolean(rawHour) };
 }
 
 function chineseWeekday(value: string): number | null {
