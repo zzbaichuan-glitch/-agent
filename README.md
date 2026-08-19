@@ -10,7 +10,7 @@
 - 推荐 GitHub 仓库名：`infomemory-agent`。
 - 推荐本地目录名：`D:\infomemory-agent`。
 
-GitHub 仓库当前仍名为 `-agent`，本地活动工作区仍为 `D:\信息管理agent`。名称不会影响代码运行；为避免在 Codex 正在使用目录时破坏工作区，本里程碑只统一代码内部命名，不自动移动活动目录。
+GitHub 仓库已更名为 [`infomemory-agent`](https://github.com/zzbaichuan-glitch/infomemory-agent)，默认分支为 `main`。本地活动工作区暂时仍为 `D:\信息管理agent`；关闭当前 Codex 工作区后，将其移动为 `D:\infomemory-agent`。
 
 ## 当前里程碑
 
