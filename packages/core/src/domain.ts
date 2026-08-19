@@ -19,7 +19,7 @@ export interface InformationAsset {
   title: string;
   redactedContent: string;
   contentHash: string;
-  source: SourceReference;
+  sources: SourceReference[];
   secretFindingCount: number;
   createdAt: string;
 }
