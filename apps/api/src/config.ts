@@ -25,21 +25,50 @@ const environmentSchema = z.object({
   FEISHU_VERIFICATION_TOKEN: optionalString,
   FEISHU_APP_ID: optionalString,
   FEISHU_APP_SECRET: optionalString,
+  FEISHU_API_BASE_URL: z.url().default('https://open.feishu.cn'),
+  FEISHU_API_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(120_000).default(10_000),
+  FEISHU_ENCRYPT_KEY: optionalString,
+  FEISHU_NOTIFICATIONS_ENABLED: booleanValue.default(false),
+  REMINDER_POLL_INTERVAL_MS: z.coerce.number().int().min(1_000).max(3_600_000).default(15_000),
 }).superRefine((value, context) => {
-  if (!value.LLM_ENABLED) return;
-  if (!value.LLM_API_KEY) {
-    context.addIssue({
-      code: 'custom',
-      path: ['LLM_API_KEY'],
-      message: 'LLM_API_KEY is required when LLM_ENABLED=true',
-    });
+  if (value.LLM_ENABLED) {
+    if (!value.LLM_API_KEY) {
+      context.addIssue({
+        code: 'custom',
+        path: ['LLM_API_KEY'],
+        message: 'LLM_API_KEY is required when LLM_ENABLED=true',
+      });
+    }
+    if (!value.LLM_MODEL) {
+      context.addIssue({
+        code: 'custom',
+        path: ['LLM_MODEL'],
+        message: 'LLM_MODEL is required when LLM_ENABLED=true',
+      });
+    }
   }
-  if (!value.LLM_MODEL) {
-    context.addIssue({
-      code: 'custom',
-      path: ['LLM_MODEL'],
-      message: 'LLM_MODEL is required when LLM_ENABLED=true',
-    });
+  if (value.FEISHU_NOTIFICATIONS_ENABLED) {
+    if (!value.FEISHU_VERIFICATION_TOKEN) {
+      context.addIssue({
+        code: 'custom',
+        path: ['FEISHU_VERIFICATION_TOKEN'],
+        message: 'FEISHU_VERIFICATION_TOKEN is required when FEISHU_NOTIFICATIONS_ENABLED=true',
+      });
+    }
+    if (!value.FEISHU_APP_ID) {
+      context.addIssue({
+        code: 'custom',
+        path: ['FEISHU_APP_ID'],
+        message: 'FEISHU_APP_ID is required when FEISHU_NOTIFICATIONS_ENABLED=true',
+      });
+    }
+    if (!value.FEISHU_APP_SECRET) {
+      context.addIssue({
+        code: 'custom',
+        path: ['FEISHU_APP_SECRET'],
+        message: 'FEISHU_APP_SECRET is required when FEISHU_NOTIFICATIONS_ENABLED=true',
+      });
+    }
   }
 });
 
@@ -56,6 +85,11 @@ export interface AppConfig {
   feishuVerificationToken?: string;
   feishuAppId?: string;
   feishuAppSecret?: string;
+  feishuApiBaseUrl: string;
+  feishuApiTimeoutMs: number;
+  feishuEncryptKey?: string;
+  feishuNotificationsEnabled: boolean;
+  reminderPollIntervalMs: number;
 }
 
 export function loadAppConfig(environment: NodeJS.ProcessEnv = process.env): AppConfig {
@@ -77,5 +111,10 @@ export function loadAppConfig(environment: NodeJS.ProcessEnv = process.env): App
     ...(parsed.FEISHU_APP_SECRET
       ? { feishuAppSecret: parsed.FEISHU_APP_SECRET }
       : {}),
+    feishuApiBaseUrl: parsed.FEISHU_API_BASE_URL,
+    feishuApiTimeoutMs: parsed.FEISHU_API_TIMEOUT_MS,
+    feishuNotificationsEnabled: parsed.FEISHU_NOTIFICATIONS_ENABLED,
+    reminderPollIntervalMs: parsed.REMINDER_POLL_INTERVAL_MS,
+    ...(parsed.FEISHU_ENCRYPT_KEY ? { feishuEncryptKey: parsed.FEISHU_ENCRYPT_KEY } : {}),
   };
 }

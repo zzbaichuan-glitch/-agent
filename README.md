@@ -24,9 +24,10 @@ GitHub 仓库已更名为 [`infomemory-agent`](https://github.com/zzbaichuan-gli
 - 模型关闭、超时、失败或答案无引用时自动降级为证据列表。
 - 飞书 URL verification、事件 Token 验证、文本事件标准化和重复事件去重。
 - 从飞书文本中识别明确或模糊的会议时间，创建用户私有的日程提醒候选；模糊时间会标记为待确认。
+- 飞书租户 access token 缓存、机器人主动文本通知、加密事件 payload 解密和提醒投递去重。
 - SQLite 本地存储、HTTP API、类型检查、单元测试和冒烟测试脚本。
 
-尚未实现：生产身份认证、飞书 OAuth/权限同步、飞书主动回复、云文档同步、向量检索、桌面 UI、OCR、系统级通知/闹钟调度、完整审计和生产数据库。这些能力不能从当前健康检查中被误判为已完成。当前提醒能力会保存排程和到期查询结果，客户端仍需轮询到期接口并调用本地通知能力。
+尚未实现：生产身份认证、飞书 OAuth/权限同步、云文档同步、向量检索、桌面 UI、OCR、系统级通知/闹钟调度、完整审计和生产数据库。这些能力不能从当前健康检查中被误判为已完成。当前版本可以在飞书中给用户发送主动文本通知，但正式上线前仍需部署 HTTPS、完成应用授权和生产身份接入。
 
 ## 安全提醒
 
@@ -42,6 +43,21 @@ LLM_MODEL=<model-id-supported-by-the-gateway>
 ```
 
 模型名称必须根据网关实际支持列表填写。本项目不会猜测一个模型名并把它作为生产默认值。
+
+飞书接入配置放在项目根目录的 `.env.local`（该文件被 Git 忽略）：
+
+```dotenv
+FEISHU_NOTIFICATIONS_ENABLED=true
+FEISHU_VERIFICATION_TOKEN=<verification-token>
+FEISHU_APP_ID=<cli_xxx>
+FEISHU_APP_SECRET=<app-secret>
+FEISHU_API_BASE_URL=https://open.feishu.cn
+FEISHU_API_TIMEOUT_MS=10000
+FEISHU_ENCRYPT_KEY=<optional-encrypt-key>
+REMINDER_POLL_INTERVAL_MS=15000
+```
+
+只有在飞书应用已经授权发送消息权限后，才把 `FEISHU_NOTIFICATIONS_ENABLED` 设为 `true`。不要把 `App Secret` 或 Encrypt Key 写入 Git、命令行参数或聊天记录。
 
 ## 环境要求
 
@@ -208,17 +224,38 @@ x-user-id: <user-id>
 
 ## 飞书回调基础
 
-当前可将飞书事件订阅 URL 指向：
+当前可以把飞书事件订阅 URL 指向：
 
 ```text
 https://<public-host>/v1/connectors/feishu/events
 ```
 
-需要配置 `FEISHU_VERIFICATION_TOKEN`。服务端支持 `url_verification` 和 `im.message.receive_v1` 的文本消息；只保存机器人收到的事件，默认按发送者个人可见。图片、文件、历史消息拉取、主动回复、OAuth 和源权限同步尚未实现。
+需要配置 `FEISHU_VERIFICATION_TOKEN`。服务端支持 `url_verification`、`im.message.receive_v1` 文本消息和 Encrypt Key 加密 payload；只保存机器人收到的事件，默认按发送者个人可见。图片、文件、历史消息拉取、OAuth 和源权限同步尚未实现。
 
-当文本包含“明天 14:30 开会”这类明确时间时，回调会创建 `scheduled` 提醒；“下午要开会”这类信息会创建 `needs_confirmation` 提醒，默认使用下午 15:00 作为候选时间并提前 60 分钟提醒，客户端应先让用户确认。当前服务不会直接调用操作系统闹钟或向飞书主动发消息。
+当文本包含“明天 14:30 开会”这类明确时间时，回调会创建 `scheduled` 提醒；“下午要开会”这类信息会创建 `needs_confirmation` 提醒，默认使用下午 15:00 作为候选时间并提前 60 分钟提醒。
 
-开发环境不应把未认证的本地服务直接暴露到公网。正式接入前需补充 HTTPS、请求限流、飞书 Encrypt Key 解密（如启用加密）、生产身份和完整审计。
+将 `FEISHU_NOTIFICATIONS_ENABLED=true` 并配置 `FEISHU_APP_ID`、`FEISHU_APP_SECRET` 后，服务会：
+
+1. 收到可识别的会议消息后，给发送者发送一条确认或待确认文本消息。
+2. 每 `REMINDER_POLL_INTERVAL_MS` 检查到期提醒。
+3. 通过飞书机器人发送到期提醒。
+4. 在 SQLite 中记录投递状态；成功投递不会重复发送，临时失败会释放租约并重试。
+
+## 飞书测试企业接入步骤
+
+推荐先使用测试企业或测试群，不要直接接入正式工作群。
+
+1. 在飞书开放平台创建“企业自建应用”，启用机器人能力。
+2. 在事件订阅中启用 `im.message.receive_v1`，把事件订阅地址填为 `https://<public-host>/v1/connectors/feishu/events`。
+3. 在权限管理中授予机器人接收消息和以应用身份发送消息的最小权限；具体权限名称以当前飞书控制台显示为准。
+4. 生成并保存 `App ID`、`App Secret` 和 `Verification Token`。如果在事件订阅中启用了 Encrypt Key，同时保存 `Encrypt Key`。
+5. 将这些值写入本机项目根目录的 `.env.local`，不要发到聊天、提交到 Git 或写进启动命令参数。
+6. 启动服务并完成飞书的 URL verification。飞书后台验证通过后，把机器人加入测试群。
+7. 在测试群发送“明天 14:30 开会讨论上线方案”，预期收到一条确认消息；到了提醒时间，后台 worker 会再发一条到期提醒。
+
+当前服务仍使用开发身份头保护产品 API；飞书事件本身从已验证事件 payload 推导租户和用户。正式公网部署前必须补充 OAuth/session 身份边界、HTTPS、请求限流、审计和密钥轮换。
+
+开发环境不应把未认证的本地服务直接暴露到公网。正式接入前仍需补充 HTTPS、请求限流、生产身份和完整审计。
 
 ## 文档
 

@@ -42,3 +42,21 @@ export interface ReminderRepository {
     status: ReminderStatus,
   ): Promise<Reminder | null>;
 }
+
+/** Internal worker boundary. It is intentionally separate from user-scoped reads. */
+export interface ReminderDeliveryRepository {
+  claimDueReminders(
+    at: string,
+    limit?: number,
+    leaseMs?: number,
+  ): Promise<Reminder[]>;
+  markReminderNotificationSent(
+    id: string,
+    claimedAt: string,
+    sentAt: string,
+  ): Promise<boolean>;
+  releaseReminderNotificationClaim(
+    id: string,
+    claimedAt: string,
+  ): Promise<boolean>;
+}

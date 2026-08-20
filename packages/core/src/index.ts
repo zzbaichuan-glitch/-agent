@@ -23,6 +23,7 @@ export {
 export { SqliteAssetRepository } from './repositories/sqlite-asset-repository.js';
 export {
   type ReminderRepository,
+  type ReminderDeliveryRepository,
   type ReminderListOptions,
   type PersistReminderInput,
 } from './repositories/reminder-repository.js';
@@ -49,6 +50,11 @@ export {
   type ReminderObservation,
   type ReminderServiceOptions,
 } from './services/reminder-service.js';
+export {
+  ReminderNotificationWorker,
+  type ReminderNotifier,
+  type ReminderNotificationWorkerOptions,
+} from './services/reminder-notification-worker.js';
 export {
   extractMeetingReminder,
   type MeetingReminderCandidate,

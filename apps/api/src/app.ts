@@ -3,6 +3,8 @@ import {
   AssetService,
   SearchService,
   ReminderService,
+  ReminderNotificationWorker,
+  type ReminderNotifier,
   SqliteAssetRepository,
   type LlmAnswerGenerator,
 } from '@infomemory/core';
@@ -12,8 +14,10 @@ import { ZodError } from 'zod';
 import {
   FeishuConfigurationError,
   FeishuEventService,
+  FeishuPayloadError,
   FeishuVerificationError,
 } from './feishu/feishu-event-service.js';
+import type { FeishuMessenger } from './feishu/feishu-client.js';
 import { accessContextPlugin } from './plugins/access-context.js';
 import { registerAnswerRoute } from './routes/answers.js';
 import { registerAssetRoutes } from './routes/assets.js';
@@ -28,6 +32,11 @@ export interface BuildAppOptions {
   llmGenerator?: LlmAnswerGenerator;
   llmEnabled?: boolean;
   feishuVerificationToken?: string;
+  feishuEncryptKey?: string;
+  feishuMessenger?: FeishuMessenger;
+  reminderNotifier?: ReminderNotifier;
+  reminderWorkerEnabled?: boolean;
+  reminderPollIntervalMs?: number;
 }
 
 export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyInstance> {
@@ -37,13 +46,30 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   const searchService = new SearchService(repository);
   const answerService = new AnswerService(searchService, options.llmGenerator);
   const reminderService = new ReminderService(repository);
+  const reminderWorker = options.reminderWorkerEnabled && options.reminderNotifier
+    ? new ReminderNotificationWorker(repository, options.reminderNotifier, {
+      ...(options.reminderPollIntervalMs !== undefined
+        ? { intervalMs: options.reminderPollIntervalMs }
+        : {}),
+      onError: (error) => app.log.error({ errorName: error instanceof Error ? error.name : 'UnknownError' }, 'reminder notification failed'),
+    })
+    : undefined;
   const feishuEvents = new FeishuEventService(
     assetService,
     reminderService,
-    options.feishuVerificationToken,
+    {
+      ...(options.feishuVerificationToken
+        ? { verificationToken: options.feishuVerificationToken }
+        : {}),
+      ...(options.feishuEncryptKey ? { encryptKey: options.feishuEncryptKey } : {}),
+      ...(options.feishuMessenger ? { messenger: options.feishuMessenger } : {}),
+    },
   );
 
-  app.addHook('onClose', async () => repository.close());
+  app.addHook('onClose', async () => {
+    reminderWorker?.stop();
+    repository.close();
+  });
   app.setErrorHandler(async (error, request, reply) => {
     if (error instanceof ZodError) {
       return reply.code(400).send({
@@ -55,6 +81,12 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
       return reply.code(401).send({
         error: 'feishu_verification_failed',
         message: 'Feishu callback verification failed',
+      });
+    }
+    if (error instanceof FeishuPayloadError) {
+      return reply.code(400).send({
+        error: 'feishu_payload_invalid',
+        message: 'Feishu callback payload could not be decrypted',
       });
     }
     if (error instanceof FeishuConfigurationError) {
@@ -79,6 +111,7 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   registerHealthRoute(app, {
     llmEnabled: options.llmEnabled ?? Boolean(options.llmGenerator),
     feishuConfigured: Boolean(options.feishuVerificationToken),
+    feishuNotificationsEnabled: Boolean(options.feishuMessenger),
   });
 
   await app.register(async (secured) => {
@@ -92,6 +125,8 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
   await app.register(async (feishu) => {
     registerFeishuEventRoute(feishu, feishuEvents);
   }, { prefix: '/v1/connectors/feishu' });
+
+  reminderWorker?.start();
 
   return app;
 }

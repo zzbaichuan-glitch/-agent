@@ -2,6 +2,9 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 
 import { AssetService, ReminderService, type Reminder } from '@infomemory/core';
 
+import { decodeFeishuPayload, FeishuPayloadError } from './feishu-payload.js';
+import type { FeishuMessenger } from './feishu-client.js';
+
 type UnknownRecord = Record<string, unknown>;
 
 export type FeishuEventResult =
@@ -10,6 +13,7 @@ export type FeishuEventResult =
     type: 'ack';
     processed: boolean;
     reminder?: Reminder | null;
+    notificationSent?: boolean;
     reason?:
       | 'unsupported_event'
       | 'unsupported_message_type'
@@ -32,16 +36,24 @@ export class FeishuConfigurationError extends Error {
   }
 }
 
+export { FeishuPayloadError };
+
+export interface FeishuEventServiceOptions {
+  verificationToken?: string;
+  encryptKey?: string;
+  messenger?: FeishuMessenger;
+}
+
 export class FeishuEventService {
   constructor(
     private readonly assetService: AssetService,
     private readonly reminderService: ReminderService,
-    private readonly verificationToken?: string,
+    private readonly options: FeishuEventServiceOptions = {},
   ) {}
 
   async handle(payload: unknown): Promise<FeishuEventResult> {
-    if (!this.verificationToken) throw new FeishuConfigurationError();
-    const body = asRecord(payload);
+    if (!this.options.verificationToken) throw new FeishuConfigurationError();
+    const body = asRecord(decodeFeishuPayload(payload, this.options.encryptKey));
     if (!body) return { type: 'ack', processed: false, reason: 'invalid_event_payload' };
 
     if (body.type === 'url_verification') {
@@ -93,22 +105,60 @@ export class FeishuEventService {
       { tenantId, userId },
       { text, sourceAssetId: result.asset.id, sourceEventId: eventId },
     );
-    if (result.created) return { type: 'ack', processed: true, reminder };
+    const notificationSent = reminder && result.deduplicatedBy !== 'idempotency'
+      ? await this.#notify(userId, reminder)
+      : false;
+    if (result.created) {
+      return {
+        type: 'ack',
+        processed: true,
+        reminder,
+        ...(notificationSent ? { notificationSent: true } : {}),
+      };
+    }
     return {
       type: 'ack',
       processed: false,
       reminder,
+      ...(notificationSent ? { notificationSent: true } : {}),
       reason: result.deduplicatedBy === 'idempotency'
         ? 'duplicate_event'
         : 'duplicate_content',
     };
   }
 
+  async #notify(userId: string, reminder: Reminder): Promise<boolean> {
+    if (!this.options.messenger) return false;
+    try {
+      await this.options.messenger.sendText(userId, reminderMessage(reminder));
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   #verify(receivedToken: string | null): void {
-    if (!receivedToken || !safeEqual(receivedToken, this.verificationToken ?? '')) {
+    if (!receivedToken || !safeEqual(receivedToken, this.options.verificationToken ?? '')) {
       throw new FeishuVerificationError();
     }
   }
+}
+
+function reminderMessage(reminder: Reminder): string {
+  const startsAt = new Date(reminder.startsAt);
+  const formatted = new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(startsAt);
+  if (reminder.precision === 'exact' && reminder.status === 'scheduled') {
+    return `知澜提醒：已识别到会议。\n时间：${formatted}\n我会在会议前提醒你。`;
+  }
+  return `知澜提醒：发现一条可能的会议安排。\n候选时间：${formatted}\n请确认后再按此时间提醒。`;
 }
 
 function asRecord(value: unknown): UnknownRecord | null {

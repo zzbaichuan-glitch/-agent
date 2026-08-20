@@ -3,15 +3,18 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve, isAbsolute } from 'node:path';
 
 import { OpenAiCompatibleClient, type LlmAnswerGenerator } from '@infomemory/core';
+import { type ReminderNotifier } from '@infomemory/core';
 import { config as loadEnvironment } from 'dotenv';
 
 import { buildApp } from './app.js';
 import { loadAppConfig } from './config.js';
+import { FeishuClient, formatReminderNotification } from './feishu/feishu-client.js';
 
 loadEnvironment({ path: ['.env.local', '.env'], quiet: true });
 const config = loadAppConfig();
 const databasePath = resolveDatabasePath(config.databasePath);
 const llmGenerator = createLlmGenerator();
+const feishuClient = createFeishuClient();
 const app = await buildApp({
   databasePath,
   logger: true,
@@ -20,6 +23,11 @@ const app = await buildApp({
   ...(config.feishuVerificationToken
     ? { feishuVerificationToken: config.feishuVerificationToken }
     : {}),
+  ...(config.feishuEncryptKey ? { feishuEncryptKey: config.feishuEncryptKey } : {}),
+  ...(feishuClient ? { feishuMessenger: feishuClient } : {}),
+  ...(feishuClient ? { reminderNotifier: createReminderNotifier(feishuClient) } : {}),
+  reminderWorkerEnabled: Boolean(feishuClient),
+  reminderPollIntervalMs: config.reminderPollIntervalMs,
 });
 
 const shutdown = async (signal: string): Promise<void> => {
@@ -54,4 +62,22 @@ function resolveDatabasePath(value: string): string {
   const absolute = isAbsolute(value) ? value : resolve(projectRoot, value);
   mkdirSync(dirname(absolute), { recursive: true });
   return absolute;
+}
+
+function createFeishuClient(): FeishuClient | undefined {
+  if (!config.feishuNotificationsEnabled) return undefined;
+  return new FeishuClient({
+    baseUrl: config.feishuApiBaseUrl,
+    appId: config.feishuAppId ?? '',
+    appSecret: config.feishuAppSecret ?? '',
+    timeoutMs: config.feishuApiTimeoutMs,
+  });
+}
+
+function createReminderNotifier(client: FeishuClient): ReminderNotifier {
+  return {
+    notify: async (reminder) => {
+      await client.sendText(reminder.userId, formatReminderNotification(reminder));
+    },
+  };
 }

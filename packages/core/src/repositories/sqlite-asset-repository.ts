@@ -16,13 +16,14 @@ import type {
 } from './asset-repository.js';
 import type {
   PersistReminderInput,
+  ReminderDeliveryRepository,
   ReminderListOptions,
   ReminderRepository,
 } from './reminder-repository.js';
 
 type Row = Record<string, unknown>;
 
-export class SqliteAssetRepository implements AssetRepository, ReminderRepository {
+export class SqliteAssetRepository implements AssetRepository, ReminderRepository, ReminderDeliveryRepository {
   readonly #database: DatabaseSync;
 
   constructor(path: string) {
@@ -226,6 +227,67 @@ export class SqliteAssetRepository implements AssetRepository, ReminderRepositor
     return this.findReminder(context, id);
   }
 
+  async claimDueReminders(
+    at: string,
+    limit = 50,
+    leaseMs = 300_000,
+  ): Promise<Reminder[]> {
+    const safeLimit = Math.max(1, Math.min(limit, 200));
+    const leaseExpiresAt = new Date(new Date(at).getTime() - Math.max(5_000, leaseMs)).toISOString();
+    this.#database.exec('BEGIN IMMEDIATE;');
+    try {
+      const rows = this.#database.prepare(`
+        SELECT * FROM reminders
+        WHERE status = 'scheduled'
+          AND remind_at <= ?
+          AND notification_sent_at IS NULL
+          AND (notification_claimed_at IS NULL OR notification_claimed_at <= ?)
+        ORDER BY remind_at ASC, starts_at ASC, id ASC
+        LIMIT ?
+      `).all(at, leaseExpiresAt, safeLimit) as Row[];
+      const claimed: Reminder[] = [];
+      for (const row of rows) {
+        const result = this.#database.prepare(`
+          UPDATE reminders
+          SET notification_claimed_at = ?
+          WHERE id = ?
+            AND notification_sent_at IS NULL
+            AND (notification_claimed_at IS NULL OR notification_claimed_at <= ?)
+        `).run(at, String(row.id), leaseExpiresAt);
+        if (Number(result.changes) === 1) {
+          claimed.push(this.#mapReminder({ ...row, notification_claimed_at: at }));
+        }
+      }
+      this.#database.exec('COMMIT;');
+      return claimed;
+    } catch (error) {
+      this.#database.exec('ROLLBACK;');
+      throw error;
+    }
+  }
+
+  async markReminderNotificationSent(
+    id: string,
+    claimedAt: string,
+    sentAt: string,
+  ): Promise<boolean> {
+    const result = this.#database.prepare(`
+      UPDATE reminders
+      SET notification_sent_at = ?, notification_claimed_at = NULL
+      WHERE id = ? AND notification_claimed_at = ? AND notification_sent_at IS NULL
+    `).run(sentAt, id, claimedAt);
+    return Number(result.changes) === 1;
+  }
+
+  async releaseReminderNotificationClaim(id: string, claimedAt: string): Promise<boolean> {
+    const result = this.#database.prepare(`
+      UPDATE reminders
+      SET notification_claimed_at = NULL
+      WHERE id = ? AND notification_claimed_at = ? AND notification_sent_at IS NULL
+    `).run(id, claimedAt);
+    return Number(result.changes) === 1;
+  }
+
   close(): void {
     this.#database.close();
   }
@@ -276,12 +338,26 @@ export class SqliteAssetRepository implements AssetRepository, ReminderRepositor
         precision TEXT NOT NULL CHECK (precision IN ('exact', 'period', 'inferred')),
         source_asset_id TEXT REFERENCES assets(id) ON DELETE SET NULL,
         source_event_id TEXT,
+        notification_claimed_at TEXT,
+        notification_sent_at TEXT,
         created_at TEXT NOT NULL,
         UNIQUE (tenant_id, user_id, source_event_id)
       );
       CREATE INDEX IF NOT EXISTS reminders_due_lookup
         ON reminders (tenant_id, user_id, status, remind_at, starts_at);
     `);
+    this.#ensureReminderColumn('notification_claimed_at');
+    this.#ensureReminderColumn('notification_sent_at');
+    this.#database.exec(`
+      CREATE INDEX IF NOT EXISTS reminders_delivery_lookup
+        ON reminders (status, remind_at, notification_sent_at, notification_claimed_at);
+    `);
+  }
+
+  #ensureReminderColumn(name: 'notification_claimed_at' | 'notification_sent_at'): void {
+    const columns = this.#database.prepare('PRAGMA table_info(reminders)').all() as Row[];
+    if (columns.some((column) => String(column.name) === name)) return;
+    this.#database.exec(`ALTER TABLE reminders ADD COLUMN ${name} TEXT`);
   }
 
   #insertSource(assetId: string, source: SourceReference): void {

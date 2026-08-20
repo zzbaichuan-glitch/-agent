@@ -3,6 +3,7 @@ import type { FastifyInstance } from 'fastify';
 export interface HealthRouteOptions {
   llmEnabled: boolean;
   feishuConfigured: boolean;
+  feishuNotificationsEnabled: boolean;
 }
 
 export function registerHealthRoute(
@@ -16,6 +17,7 @@ export function registerHealthRoute(
     searchMode: 'keyword',
     llmEnabled: options.llmEnabled,
     feishuConfigured: options.feishuConfigured,
+    feishuNotificationsEnabled: options.feishuNotificationsEnabled,
     capabilities: [
       'pre_persistence_secret_redaction',
       'tenant_owner_access_boundaries',
@@ -24,6 +26,7 @@ export function registerHealthRoute(
       'citation_gated_answers',
       'feishu_callback_foundation',
       'meeting_reminder_candidates',
+      ...(options.feishuNotificationsEnabled ? ['feishu_outbound_notifications'] : []),
     ],
   }));
 }

@@ -1,15 +1,18 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { buildApp } from '../src/app.js';
 
 describe('Feishu callback foundation', () => {
   let app: Awaited<ReturnType<typeof buildApp>>;
+  let messenger: { sendText: ReturnType<typeof vi.fn> };
 
   beforeEach(async () => {
+    messenger = { sendText: vi.fn().mockResolvedValue({ messageId: 'outbound-message-1' }) };
     app = await buildApp({
       databasePath: ':memory:',
       logger: false,
       feishuVerificationToken: 'expected-token',
+      feishuMessenger: messenger,
     });
   });
 
@@ -92,7 +95,12 @@ describe('Feishu callback foundation', () => {
       code: 0,
       processed: true,
       reminder: { status: 'scheduled', precision: 'exact' },
+      notificationSent: true,
     });
+    expect(messenger.sendText).toHaveBeenCalledWith(
+      'open-id-1',
+      expect.stringContaining('已识别到会议'),
+    );
     expect(second.json()).toMatchObject({
       code: 0,
       processed: false,
